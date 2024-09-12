@@ -1,0 +1,309 @@
+---
+title: "STATS 506 PS 1"
+author: "Jingyan Zhang"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+editor: visual
+---
+
+link to my GitHub repo: https://github.com/Menako2013529/STATS-506-Problem-Set
+
+# Problem 1
+
+## a.  
+
+```{r}
+# Assigning column names based on wine.names
+column_names <- c("Class", "Alcohol", "Malic Acid", "Ash", "Alcalinity of Ash", "Magnesium",
+                  "Total phenols", "Flavanoids", "Nonflavanoid phenols", "Proanthocyanins",
+                  "Color intensity", "Hue", "OD280/OD315 of diluted wines", "Proline")
+
+wine_data <- read.csv("wine.data", header = FALSE)
+colnames(wine_data) <- column_names
+```
+
+## b.  
+
+```{r}
+class_distribution <- table(wine_data$Class)
+print(class_distribution)
+```
+
+Yes, the number of wines within each class is correct as reported in "wine.names".
+
+## c.
+
+### 1.
+
+```{r}
+correlation <- cor(wine_data$Alcohol, wine_data$`Color intensity`)
+print(correlation)
+```
+
+Correlation is 0.5463642.
+
+### 2.
+```{r}
+correlation_by_class <- by(wine_data[, c("Alcohol", "Color intensity")], wine_data$Class, function(subdata) {
+  cor(subdata$Alcohol, subdata$`Color intensity`)
+})
+print(correlation_by_class)
+```
+
+Class 1 has highest correlation and Class 2 has lowest correlation.
+
+### 3.
+
+```{r}
+highest_color_intensity <- wine_data[which.max(wine_data$`Color intensity`),]
+alcohol_highest_color_intensity <- highest_color_intensity$Alcohol
+print(alcohol_highest_color_intensity)
+```
+
+The alcohol content of the wine with the highest color intensity is 14.34.
+
+### 4.
+
+```{r}
+percentage_higher_proanthocyanins <- mean(wine_data$Proanthocyanins > wine_data$Ash) * 100
+print(percentage_higher_proanthocyanins)
+```
+
+The percentage of wines had a higher content of proanthocyanins compare to ash is 8.426966%.
+
+
+## d.
+
+```{r}
+overall_average <- colMeans(wine_data[, -1])
+class_averages <- aggregate(. ~ Class, data = wine_data, FUN = mean)
+overall_average <- c(overall_average)
+combined_averages <- rbind(cbind(Class = "Overall", as.data.frame(t(overall_average))), class_averages)
+print(combined_averages)
+```
+
+## e.
+
+I manually wrote the t-tests, based on ChatGPT.
+
+```{r}
+manual_t_test <- function(group1, group2) {
+  n1 <- length(group1)
+  n2 <- length(group2)
+  mean1 <- mean(group1)
+  mean2 <- mean(group2)
+  var1 <- var(group1)
+  var2 <- var(group2)
+  pooled_sd <- sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+  t_stat <- (mean1 - mean2) / (pooled_sd * sqrt(1/n1 + 1/n2))
+  df <- n1 + n2 - 2
+  p_value <- 2 * pt(-abs(t_stat), df)
+  return(list(t_stat = t_stat, p_value = p_value, df = df))
+}
+```
+
+```{r}
+class_1 <- wine_data$`Total phenols`[wine_data$Class == 1]
+class_2 <- wine_data$`Total phenols`[wine_data$Class == 2]
+class_3 <- wine_data$`Total phenols`[wine_data$Class == 3]
+manual_t_test_1_vs_2 <- manual_t_test(class_1, class_2)
+manual_t_test_1_vs_3 <- manual_t_test(class_1, class_3)
+manual_t_test_2_vs_3 <- manual_t_test(class_2, class_3)
+
+
+cat("\nManual T-test between Class 1 and Class 2:\n")
+print(manual_t_test_1_vs_2)
+cat("\nManual T-test between Class 1 and Class 3:\n")
+print(manual_t_test_1_vs_3)
+cat("\nManual T-test between Class 2 and Class 3:\n")
+print(manual_t_test_2_vs_3)
+```
+Based on the t-tests results, all the p-value can be seen as significantly small if we set p-value < 0.05 as the significant level. Therefore, we can confidently reject the null hypothesis that the level of phenols is same across the three classes. So level of phenols differs across the three classes.
+
+# Problem 2
+
+## a.
+
+```{r}
+ask_a_manager_data <- read.csv("AskAManager.csv", header=TRUE)
+```
+
+## b.
+
+```{r}
+ask_a_manager_data[ask_a_manager_data == ""] <- NA
+ask_a_manager_data <- ask_a_manager_data[,colSums(is.na(ask_a_manager_data))<nrow(ask_a_manager_data)]
+#colnames(ask_a_manager_data)
+```
+
+```{r}
+revised_colnames <- c("x", "timestamp", "age range", "industry", "job title",
+                      "job title additional context", "annual salary", 
+                      "additional monetary compensation", "currency",
+                      "other currency", "income additional context",
+                      "country", "states", "city", 
+                      "overall years of professional work experience", "in your field years of professional work experience", "education level", "gender", "race")
+colnames(ask_a_manager_data) <- revised_colnames
+colnames(ask_a_manager_data)
+```
+
+
+## c.
+```{r}
+library(dplyr)
+initial_observations <- nrow(ask_a_manager_data)
+
+ask_a_manager_usd <- ask_a_manager_data %>% filter(currency == "USD" | `other currency` == "USD")
+
+# Confirm the number of observations after restricting to USD
+usd_observations <- nrow(ask_a_manager_usd)
+cat("Number of observations before restriction:", initial_observations, "\n")
+cat("Number of observations after restricting to USD:", usd_observations, "\n")
+```
+
+It worked as the number of observations is changed from 28062 to 23382.
+
+## d.
+
+```{r}
+unique(ask_a_manager_usd$`age range`)
+unique(ask_a_manager_usd$`overall years of professional work experience`)
+unique(ask_a_manager_usd$`in your field years of professional work experience`)
+```
+
+I referred code generated by ChatGPT.
+```{r}
+ask_a_manager_usd$`age upper bond` <- case_when(
+  ask_a_manager_usd$`age range` == "25-34" ~ 34,
+  ask_a_manager_usd$`age range` == "45-54" ~ 54,
+  ask_a_manager_usd$`age range` == "35-44" ~ 44,
+  ask_a_manager_usd$`age range` == "18-24" ~ 24,
+  ask_a_manager_usd$`age range` == "65 or over" ~ 100,  # Maximum age set to 100
+  ask_a_manager_usd$`age range` == "55-64" ~ 64,
+  ask_a_manager_usd$`age range` == "under 18" ~ 18,
+)
+
+ask_a_manager_usd$`overall work low bond` <- case_when(
+  ask_a_manager_usd$`overall years of professional work experience` == "5-7 years" ~ 5,
+  ask_a_manager_usd$`overall years of professional work experience` == "2 - 4 years" ~ 2,
+  ask_a_manager_usd$`overall years of professional work experience` == "8 - 10 years" ~ 8,
+  ask_a_manager_usd$`overall years of professional work experience` == "21 - 30 years" ~ 21,
+  ask_a_manager_usd$`overall years of professional work experience` == "11 - 20 years" ~ 11,
+  ask_a_manager_usd$`overall years of professional work experience` == "41 years or more" ~ 41,
+  ask_a_manager_usd$`overall years of professional work experience` == "31 - 40 years" ~ 31,
+  ask_a_manager_usd$`overall years of professional work experience` == "1 year or less" ~ 0,
+)
+
+ask_a_manager_usd$`field work low bond` <- case_when(
+  ask_a_manager_usd$`in your field years of professional work experience` == "5-7 years" ~ 5,
+  ask_a_manager_usd$`in your field years of professional work experience` == "2 - 4 years" ~ 2,
+  ask_a_manager_usd$`in your field years of professional work experience` == "21 - 30 years" ~ 21,
+  ask_a_manager_usd$`in your field years of professional work experience` == "11 - 20 years" ~ 11,
+  ask_a_manager_usd$`in your field years of professional work experience` == "8 - 10 years" ~ 8,
+  ask_a_manager_usd$`in your field years of professional work experience` == "1 year or less" ~ 0,
+  ask_a_manager_usd$`in your field years of professional work experience` == "31 - 40 years" ~ 31,
+  ask_a_manager_usd$`in your field years of professional work experience` == "41 years or more" ~ 41,
+)
+
+
+```
+
+```{r}
+ask_a_manager_usd <- ask_a_manager_usd[which(ask_a_manager_usd$`overall work low bond` >= ask_a_manager_usd$`field work low bond` &ask_a_manager_usd$`overall work low bond` + 18 <= ask_a_manager_usd$`age upper bond`),]
+eliminated_observations <- nrow(ask_a_manager_usd)
+```
+
+```{r}
+cat("Number of observations before elimination:", usd_observations, "\n")
+cat("Number of observations after elimination:", eliminated_observations, "\n")
+```
+
+It worked as the number of observations is changed from 23382 to 23128 after elimination.
+
+## e.
+
+I referred code from ChatGPT on how to visualize the histogram.
+```{r}
+salary_bins <- cut(ask_a_manager_usd$`annual salary`, 
+                   breaks = seq(0, 500000, by = 10000),
+                   include.lowest = TRUE)
+
+salary_distribution <- table(salary_bins)
+print(salary_distribution)
+
+barplot(salary_distribution,
+        main = "Salary Distribution (Binned)",
+        xlab = "Salary Range",
+        ylab = "Frequency",
+        col = "lightblue",
+        las = 2, # Rotate the labels on x-axis for better readability
+        cex.names = 0.8) # Adjust the size of axis labels
+```
+
+From the numerical and visualization of annual salary distribution, I decided to eliminate salary more than 4.5e+05 as they are extreme and with little frequency.
+
+```{r}
+ask_a_manager_usd <- ask_a_manager_usd[which(ask_a_manager_usd$`annual salary`<4.5*10^5),]
+final_observations <- nrow(ask_a_manager_usd)
+cat("Number of final observations:", final_observations, "\n")
+```
+
+The final sample size is 22992.
+
+# Problem 3
+
+## a.
+
+I referred the algorithm on https://stackoverflow.com/questions/199184/how-do-i-check-if-a-number-is-a-palindrome
+```{r}
+isPalindromic <- function(num) {
+  if (!is.numeric(num) || num < 1 || num != as.integer(num)) {
+    stop("Input must be a positive integer.")
+  }
+  rev <- 0
+  n <- num
+  while (num > 0)
+  {
+    dig = num %% 10;
+    rev = rev * 10 + dig;
+    num = num %/% 10;
+  }
+  is_palindromic <- rev == n
+  return(list(isPalindromic = is_palindromic, reversed = rev))
+}
+
+print(isPalindromic(728827))
+print(isPalindromic(15993))
+```
+
+## b.
+
+```{r}
+nextPalindrome <- function(num) {
+  if (!is.numeric(num) || num < 1 || num != as.integer(num)) {
+    stop("Input must be a positive integer.")
+  }
+  num <- num + 1
+  while (!isPalindromic(num)$isPalindromic) {
+    num <- num + 1
+  }
+  return(num)
+}
+
+print(nextPalindrome(7152))
+print(nextPalindrome(765431537))
+```
+
+## c.
+
+```{r}
+numbers <- c(391, 9928, 19272719, 109, 2)
+
+for (num in numbers) {
+  next_num <- nextPalindrome(num)
+  cat("The next palindrome for ", num, " is ", next_num, "\n")
+}
+```
+
