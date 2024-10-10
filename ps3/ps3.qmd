@@ -1,0 +1,332 @@
+---
+title: "STATS 506 PS 3"
+author: "Jingyan Zhang"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+editor: visual
+---
+
+link to my GitHub repo: https://github.com/Menako2013529/STATS-506-Problem-Set
+
+```{r}
+library(haven)
+library(dplyr)
+library(knitr)
+```
+
+# Problem 1
+
+I referred to ChatGPT for help reading .XPT files.
+
+## a.
+
+```{r}
+# Load the datasets
+vix_d <- read_xpt("VIX_D.XPT")
+demo_d <- read_xpt("DEMO_D.XPT")
+
+# Merge the datasets by SEQN, keeping only the matched records
+merged_data <- inner_join(vix_d, demo_d, by = "SEQN")
+
+sample_size <- nrow(merged_data)
+cat("Total sample size: ", sample_size)
+```
+
+So the total sample size is now 6980, matched with the question requirement.
+
+## b.
+
+According to VIX_D documentation, VIQ220 represents whether tester wear glasses or contact lenses for distance vision, with 1 represents Yes, 2 represents No, 9 represents don't know and NA represents missing values, shown below.
+
+```{r}
+unique(merged_data$VIQ220)
+```
+
+According to DEMO_D documentation, RIDAGEYR represents the ages in years of testers.
+
+```{r}
+merged_data <- merged_data %>%
+  mutate(age_bracket = cut(RIDAGEYR, breaks = seq(0, 100, by = 10), 
+                           right = FALSE, 
+                           labels = paste(seq(0, 90, by = 10),
+                                          seq(9, 99, by = 10), 
+                                          sep = "-")))
+
+proportion_data <- merged_data %>%
+  group_by(age_bracket) %>%
+  summarise(
+    total = n(),
+    wear_glasses = sum(VIQ220 == 1, na.rm = TRUE),
+    proportion_wearing_glasses = wear_glasses / total
+  )
+
+# Round the results for better readability
+proportion_data <- proportion_data %>%
+  mutate(proportion_wearing_glasses = round(proportion_wearing_glasses, 2))
+
+# Print the result
+kable(proportion_data, caption = "Proportion of Respondents Wearing Glasses/Contacts for Distance Vision by Age Bracket", digits = 2)
+
+```
+
+## c.
+
+According to DEMO_D documentation, RIDGEYR represents age, RIDRETH1 represents race, RIAGENDR represents gender and INDFMPIR represents poverty income ratio.
+
+```{r}
+# Remove NA missing values and map race and gender
+data_clean <- merged_data %>%
+  select(RIDAGEYR, RIDRETH1, RIAGENDR, INDFMPIR, VIQ220) %>%
+  filter(!is.na(RIDAGEYR) & !is.na(RIDRETH1) & !is.na(RIAGENDR) & !is.na(INDFMPIR) & !is.na(VIQ220)) %>%
+  mutate(RIAGENDR = recode(RIAGENDR, '1'="Male", '2'="Female"),
+         RIDRETH1 = recode(RIDRETH1, '1'="Mexican American",
+                                     '2'="Other Hispanic",
+                                     '3'="Non-Hispanic White",
+                                     '4'="Non-Hispanic Black",
+                                     '5'="Other Race"),
+         VIQ220 = recode(VIQ220, '1'=1, '2'=0,'9'=0))
+
+# Ensure categorical variables are factors
+data_clean <- data_clean %>%
+  mutate(RIAGENDR = as.factor(RIAGENDR),
+         RIDRETH1 = as.factor(RIDRETH1))
+```
+
+```{r}
+unique(data_clean$VIQ220)
+```
+
+```{r}
+library(pscl)
+model_1 <- glm(VIQ220 ~ RIDAGEYR, data = data_clean, family = binomial)
+
+model_2 <- glm(VIQ220 ~ RIDAGEYR + RIDRETH1 + RIAGENDR, data = data_clean, family = binomial)
+
+model_3 <- glm(VIQ220 ~ RIDAGEYR + RIDRETH1 + RIAGENDR + INDFMPIR, data = data_clean, family = binomial)
+```
+
+```{r}
+extract_model_info <- function(model) {
+  model_summary <- broom::tidy(model, exponentiate = TRUE, conf.int = TRUE)
+  
+  # Get sample size, AIC, and pseudo-R²
+  sample_size <- nobs(model)
+  aic_value <- AIC(model)
+  pseudo_r2 <- pscl::pR2(model)["McFadden"]
+  
+  # Add sample size, pseudo-R², and AIC to the output
+  model_summary <- model_summary %>%
+    mutate(Sample_Size = sample_size,
+           Pseudo_R2 = pseudo_r2,
+           AIC = aic_value)
+  
+  return(model_summary)
+}
+
+# Extract info for each model
+model_1_info <- extract_model_info(model_1)
+model_2_info <- extract_model_info(model_2)
+model_3_info <- extract_model_info(model_3)
+
+```
+
+```{r}
+results_table <- list(
+  "Model 1 (Age)" = model_1_info,
+  "Model 2 (Age, Race, Gender)" = model_2_info,
+  "Model 3 (Age, Race, Gender, Poverty Ratio)" = model_3_info
+)
+
+# Display the results using kable
+kable(bind_rows(results_table, .id = "Model"),
+      caption = "Logistic Regression Results: Odds Ratios, Sample Size, Pseudo-R², and AIC",
+      digits = 2)
+
+```
+
+## d.
+
+```{r}
+kable(summary(model_3)$coefficients["RIAGENDRMale",] ,digits = 2)
+```
+
+The odds of men wearing glasses/contact lenses for distance vision are **significantly lower** than women, with a log-odds difference of -0.52. The corresponding p-value is less than 0.05, showing a significant difference in odds between men and women.
+
+# Problem 2
+
+## a.
+
+```{r}
+library(DBI)
+library(RSQLite)
+
+con <- dbConnect(RSQLite::SQLite(), "sakila_master.db")
+
+query <- "
+SELECT release_year, COUNT(*) AS movie_count
+FROM film
+WHERE release_year = (SELECT MIN(release_year) FROM film)
+GROUP BY release_year;
+"
+
+result <- dbGetQuery(con, query)
+print(result)
+
+```
+
+## b.
+
+\(1\) Using SQL
+
+```{r}
+query_genre <- "
+SELECT category.name AS genre, COUNT(film_category.film_id) AS movie_count
+FROM category
+JOIN film_category ON category.category_id = film_category.category_id
+GROUP BY genre
+ORDER BY movie_count limit 1;
+"
+
+genre_data <- dbGetQuery(con, query_genre)
+print(genre_data)
+
+```
+
+\(2\) Using R
+
+```{r}
+least_common_genre <- genre_data[which.min(genre_data$movie_count), ]
+print(least_common_genre)
+
+```
+
+## c.
+
+\(1\) Using SQL
+
+```{r}
+query_country_customers <- "
+SELECT country.country AS country_name, COUNT(customer.customer_id) AS customer_count
+FROM country
+JOIN city ON country.country_id = city.country_id
+JOIN address ON city.city_id = address.city_id
+JOIN customer ON address.address_id = customer.address_id
+GROUP BY country_name
+HAVING customer_count = 13;
+"
+country_customers_data <- dbGetQuery(con, query_country_customers)
+print(country_customers_data)
+```
+
+\(2\) Using R
+
+```{r}
+countries_with_13_customers <- country_customers_data[country_customers_data$customer_count == 13, ]
+
+print(countries_with_13_customers)
+```
+
+# Problem 3
+
+## a.
+
+```{r}
+us_500 <- read.csv("us-500.csv")
+us_500 <- us_500 %>%
+  mutate(domain = sub(".*@", "", email),  # Extract domain from email
+         tld = sub(".*\\.", "", domain))
+
+proportion_com <- us_500 %>%
+  summarise(proportion = mean(tld == "com"))
+print(proportion_com)
+```
+
+## b.
+
+I referred ChatGPT code.
+
+```{r}
+non_alphanumeric_pattern <- "[^a-zA-Z0-9@.]"
+
+data <- us_500 %>%
+  mutate(has_non_alphanumeric = grepl(non_alphanumeric_pattern, email))
+
+proportion_non_alphanumeric <- data %>%
+  summarise(proportion = mean(has_non_alphanumeric))
+
+print(proportion_non_alphanumeric)
+```
+
+## c.
+
+```{r}
+data <- us_500 %>%
+  mutate(area_code = substr(gsub("[^0-9]", "", phone1), 1, 3))
+top_area_codes <- data %>%
+  group_by(area_code) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  head(5)
+
+print(top_area_codes)
+```
+
+The top 5 area codes are 973, 212, 215, 410 and 201.
+
+## d.
+
+```{r}
+library(ggplot2)
+data <- us_500 %>%
+  mutate(apartment_number = as.numeric(sub(".*[^0-9]([0-9]+)$", "\\1", address))) %>% na.omit()
+
+data <- data %>%
+  filter(!is.na(apartment_number))
+
+data <- data %>%
+  mutate(log_apartment_number = log(apartment_number))
+
+ggplot(data, aes(x = log_apartment_number)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(title = "Histogram of Log of Apartment Numbers", x = "Log of Apartment Number", y = "Frequency") +
+  theme_minimal()
+```
+
+## e.
+
+```{r}
+data <- us_500 %>%
+  mutate(apartment_number = as.numeric(sub(".*[^0-9]([0-9]+)$", "\\1", address))) %>%
+  filter(!is.na(apartment_number)) %>%
+  mutate(leading_digit = as.numeric(substr(apartment_number, 1, 1))) %>% 
+  na.omit()
+
+observed_freq <- data %>%
+  group_by(leading_digit) %>%
+  summarise(count = n()) %>%
+  mutate(observed_prob = count / sum(count))
+
+# Benford's Law expected probabilities for digits 1 through 9
+benford_prob <- tibble(
+  leading_digit = 1:9,
+  expected_prob = log10(1 + 1 / leading_digit)
+)
+
+# Merge the observed and expected probabilities
+comparison <- left_join(observed_freq, benford_prob, by = "leading_digit") %>%
+  mutate(expected_count = expected_prob * sum(count))
+
+
+
+ggplot(comparison, aes(x = factor(leading_digit))) +
+  geom_bar(aes(y = observed_prob), stat = "identity", fill = "blue", alpha = 0.7) +
+  geom_point(aes(y = expected_prob), color = "red", size = 3) +
+  labs(title = "Observed vs. Expected Leading Digits (Benford's Law)",
+       x = "Leading Digit", y = "Proportion") +
+  theme_minimal()
+```
+
+According to the proportion of leading digits and predicted proportion by Benford's law, the apartment numbers appear not to follow Benford's law, would not pass as real data.
