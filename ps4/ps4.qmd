@@ -1,0 +1,237 @@
+---
+title: "STATS 506 PS 4"
+author: "Jingyan Zhang"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+editor: visual
+---
+
+link to my GitHub repo: https://github.com/Menako2013529/STATS-506-Problem-Set
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+```
+
+# Problem 1
+
+## a.
+
+I referred to chatGPT to optimize my code.
+
+Departure delay table:
+
+```{r}
+flights_with_names <- flights %>%
+  left_join(airports, by = c("origin" = "faa")) %>%
+  rename(origin_name = name) %>%
+  left_join(airports, by = c("dest" = "faa")) %>%
+  rename(dest_name = name)
+
+departure_delay_table <- flights_with_names %>%
+  group_by(origin_name) %>%
+  summarize(
+    mean_departure_delay = mean(dep_delay, na.rm = TRUE),
+    median_departure_delay = median(dep_delay, na.rm = TRUE),
+    flight_count = n()
+  ) %>%
+  filter(flight_count >= 10) %>%  
+  arrange(desc(mean_departure_delay)) %>%
+  select(-flight_count) %>%
+  print(n = Inf)
+```
+
+Arrival delay table:
+
+```{r}
+arrival_delay_table <- flights_with_names %>%
+  group_by(dest_name) %>%
+  summarize(
+    mean_arrival_delay = mean(arr_delay, na.rm = TRUE),
+    median_arrival_delay = median(arr_delay, na.rm = TRUE),
+    flight_count = n()
+  ) %>%
+  filter(flight_count >= 10) %>%
+  arrange(desc(mean_arrival_delay)) %>%
+  select(-flight_count) %>%
+  print(n = Inf)
+```
+
+## b.
+
+```{r}
+fastest_model <- flights %>%
+  # Calculate speed (distance in miles divided by air time in hours)
+  mutate(speed_mph = distance / (air_time / 60)) %>%
+  filter(!is.na(speed_mph)) %>%
+  left_join(planes, by = "tailnum") %>%
+  group_by(model) %>%
+  summarize(
+    avg_speed_mph = mean(speed_mph, na.rm = TRUE),
+    num_flights = n()
+  ) %>%
+  arrange(desc(avg_speed_mph)) %>%
+  slice(1) 
+print(fastest_model)
+```
+
+# Problem 2
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+nnmaps <- read.csv('chicago-nmmaps.csv')
+
+get_temp <- function(t_month, t_year, data, celsius = FALSE, average_fn = mean) {
+  t_month <- if (is.numeric(t_month)) {
+    if (t_month < 1 || t_month > 12) stop("Error: Month out of range")
+    t_month
+  } else {
+    t_month <- str_to_title(substr(t_month, 1, 3))
+  }
+  
+  if (t_year < min(data$year) || t_year > max(data$year)) {
+    stop("Error: Year out of range")
+  }
+  
+  filtered_data <- data %>%
+    filter(year == t_year, (month_numeric == t_month | month == t_month)) %>%
+    select(temp)
+  
+  avg_temp <- average_fn(filtered_data$temp)
+  if (celsius) avg_temp <- (avg_temp - 32) * 5 / 9
+  return(avg_temp)
+}
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps)
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+```
+
+```{r}
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+```
+
+```{r, error=TRUE}
+get_temp(13, 1998, data = nnmaps)
+```
+
+```{r, error=TRUE}
+get_temp(2, 2005, data = nnmaps)
+```
+
+```{r}
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+# Problem 3
+
+## a.
+
+```{r}
+sales_data <- read_csv("df_for_ml_improved_new_market.csv")
+avg_price_by_year <- sales_data %>%
+  group_by(year) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE))
+
+ggplot(avg_price_by_year, aes(x = year, y = avg_price_usd)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Average Sales Price in USD Over Time",
+    x = "Year",
+    y = "Average Sales Price (USD)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+```
+
+We group by year and calculate the average price in USD for each year, from the line plot it is clear that the average sales price in USD increases as time goes, and after 2008, it starts to decline.
+
+## b.
+
+I asked ChatGPT for help. It tells me to use stacked bar plot to visualize.
+
+```{r}
+genre_data <- sales_data %>%
+  pivot_longer(
+    cols = starts_with("Genre___"), 
+    names_to = "genre", 
+    values_to = "count"
+  ) %>%
+  filter(count == 1) %>%
+  mutate(genre = str_replace_all(genre, "Genre___", "")) %>%
+  group_by(year, genre) %>%
+  summarize(total_sales = n(), .groups = 'drop') 
+ggplot(genre_data, aes(x = year, y = total_sales, fill = genre)) +
+  geom_area(alpha = 0.8) +
+  labs(
+    title = "Distribution of Genre Sales Across Years",
+    x = "Year",
+    y = "Total Sales",
+    fill = "Genre"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "bottom"
+  )
+```
+
+From the plot we can see that the distribution of photography and sculpture increase and grow quickly, taking greater percentages in the whole distribution.
+
+## c.
+
+```{r}
+genre_price_data <- sales_data %>%
+  pivot_longer(
+    cols = starts_with("Genre___"), 
+    names_to = "genre", 
+    values_to = "count"
+  ) %>%
+  filter(count == 1) %>%  # Only keep rows where genre is 1 (indicating a sale for that genre)
+  mutate(genre = str_replace_all(genre, "Genre___", "")) %>%  # Clean up genre names
+  group_by(year, genre) %>%
+  summarize(avg_price_usd = mean(price_usd, na.rm = TRUE), .groups = 'drop')  # Calculate avg price
+
+# Plotting: Line plot of average sales price over time, grouped by genre
+ggplot(genre_price_data, aes(x = year, y = avg_price_usd, color = genre)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Change in Average Sales Price Over Time by Genre",
+    x = "Year",
+    y = "Average Sales Price (USD)",
+    color = "Genre"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "right"
+  )
+
+```
+
+Photography stands out as the genre with the highest volatility, driven by market trends and collector demand. Painting, sculpture and print display steady, moderate price growth. The other category shows minimal price growth.
